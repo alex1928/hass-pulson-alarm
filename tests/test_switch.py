@@ -182,3 +182,36 @@ async def test_bypass_unavailable_before_block_arrives(hass: HomeAssistant) -> N
     await setup_with_state(hass, index_only)
     entity_id = find(hass, "bypass")
     assert hass.states.get(entity_id).state == STATE_UNAVAILABLE
+
+
+async def test_bypass_unavailable_when_permission_never_reported(
+    hass: HomeAssistant,
+) -> None:
+    """`block` arrived but `block_enable` never did; must not default to permissive.
+
+    MQTT gives no ordering guarantee between the two topics, so this window
+    is real and must read unavailable rather than "off".
+    """
+    username = PulsonClient("h", 8883, SID, "1234").username
+    no_permission_yet = build_state(
+        username,
+        [
+            (f"system/{SID}/users/{username}/inputs", "2"),
+            (f"system/{SID}/inputs/2/name", "Salon"),
+            (f"system/{SID}/inputs/2/block", "0"),
+        ],
+    )
+    await setup_with_state(hass, no_permission_yet)
+    entity_id = find(hass, "bypass")
+    assert hass.states.get(entity_id).state == STATE_UNAVAILABLE
+
+
+async def test_bypass_available_when_allowed(hass: HomeAssistant) -> None:
+    """When the panel affirmatively permits bypass, the switch is available.
+
+    Reflects the reported `block` state; guards against the fix
+    over-tightening `available` into "never available".
+    """
+    await setup_with_state(hass, state())
+    entity_id = find(hass, "bypass")
+    assert hass.states.get(entity_id).state == "off"

@@ -149,7 +149,7 @@ class PulsonBypass(PulsonEntity, SwitchEntity):
 
     @property
     def available(self) -> bool:
-        """Unavailable before the panel reports a value, or when bypass is forbidden.
+        """Unavailable before the panel reports a value, or until bypass is permitted.
 
         Duplicates the small "wait for a value from this zone" check that
         `_ZoneBase.available` in binary_sensor.py already performs (there
@@ -158,16 +158,22 @@ class PulsonBypass(PulsonEntity, SwitchEntity):
         entities key off different fields, and `PulsonPartition` in
         alarm_control_panel.py already duplicates the same shape rather than
         sharing it, so this follows existing precedent. On top of that base
-        check, a zone that forbids bypassing (`block_allowed is False`) must
-        also read unavailable rather than silently accept a command the panel
-        will refuse.
+        check, the panel is the sole authority on whether a zone may be
+        bypassed at all: the switch stays unavailable until `block_allowed`
+        has been affirmatively reported `True`. A zone whose `block_allowed`
+        has never arrived (still `None`) is treated the same as one that
+        explicitly forbids it, not as permissive — MQTT gives no ordering
+        guarantee between the `block` and `block_enable` topics, so briefly
+        having one without the other is a real window, and offering a
+        security-relevant control before permission is confirmed is the
+        wrong default (the panel may then silently refuse the command).
         """
         if not super().available or self.zone_id not in self.coordinator.data.zones:
             return False
         data = self._data
         if data.blocked is None:
             return False
-        return data.block_allowed is not False
+        return data.block_allowed is True
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Bypass the zone."""
