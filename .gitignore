@@ -8,3 +8,7 @@ venv/
 *.log
 secrets.yaml
 .env
+.venv
+.superpowers/
+.coverage
+htmlcov/
