@@ -1,5 +1,7 @@
 """Tests for the immutable state model and the message reducer."""
 
+import pytest
+
 from custom_components.pulson_alarm import models
 
 SID = "SID"
@@ -93,3 +95,49 @@ def test_state_equality_supports_always_update_false() -> None:
         models.EMPTY_STATE, f"system/{SID}/partitions/1/status", "1"
     )
     assert first == second
+
+
+def test_unchanged_zone_leaf_returns_same_object() -> None:
+    state = models.apply_message(
+        models.EMPTY_STATE, f"system/{SID}/inputs/1/status", "1"
+    )
+    assert models.apply_message(state, f"system/{SID}/inputs/1/status", "1") is state
+
+
+def test_unchanged_output_leaf_returns_same_object() -> None:
+    state = models.apply_message(
+        models.EMPTY_STATE, f"system/{SID}/outputs/1/status", "1"
+    )
+    assert models.apply_message(state, f"system/{SID}/outputs/1/status", "1") is state
+
+
+def test_unchanged_online_returns_same_object() -> None:
+    state = models.apply_message(models.EMPTY_STATE, f"system/{SID}/online/esp", "true")
+    assert models.apply_message(state, f"system/{SID}/online/esp", "true") is state
+
+
+def test_unchanged_programming_returns_same_object() -> None:
+    state = models.apply_message(models.EMPTY_STATE, f"system/{SID}/programming", "1")
+    assert models.apply_message(state, f"system/{SID}/programming", "1") is state
+
+
+def test_unchanged_permissions_returns_same_object() -> None:
+    state = models.apply_message(models.EMPTY_STATE, f"{IDX}/permissions", "16367")
+    assert models.apply_message(state, f"{IDX}/permissions", "16367") is state
+
+
+def test_unchanged_index_list_returns_same_object() -> None:
+    state = models.apply_message(models.EMPTY_STATE, f"{IDX}/inputs", "1,2")
+    assert models.apply_message(state, f"{IDX}/inputs", "1,2") is state
+
+
+def test_outputs_index_creates_placeholders() -> None:
+    state = models.apply_message(models.EMPTY_STATE, f"{IDX}/outputs", "1,2")
+    assert set(state.outputs) == {"1", "2"}
+    assert models.known_ids(state, "outputs") == ("1", "2")
+
+
+def test_returned_mappings_reject_mutation() -> None:
+    state = models.apply_message(models.EMPTY_STATE, f"{IDX}/partitions", "1")
+    with pytest.raises(TypeError):
+        state.partitions["2"] = models.PartitionData(id="2")  # type: ignore[index]
