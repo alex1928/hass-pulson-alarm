@@ -90,9 +90,16 @@ class PulsonPartition(PulsonEntity, AlarmControlPanelEntity):
 
     @property
     def available(self) -> bool:
-        """Only available once the panel has reported this partition."""
+        """Only available once the panel has reported a status for this partition.
+
+        The retained index topic creates a `PartitionData` with `status=None`
+        before any per-element `status` leaf arrives. Treat that window as
+        unavailable rather than surfacing a stale/empty `unknown` state.
+        """
         return (
-            super().available and self.partition_id in self.coordinator.data.partitions
+            super().available
+            and self.partition_id in self.coordinator.data.partitions
+            and self._data.status is not None
         )
 
     @property
