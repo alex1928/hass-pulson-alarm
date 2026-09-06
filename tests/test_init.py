@@ -39,6 +39,10 @@ async def test_setup_and_unload(hass: HomeAssistant) -> None:
             "custom_components.pulson_alarm.PulsonClient.async_run",
             new=AsyncMock(),
         ),
+        # Platform forwarding is proven by each platform's own tests (Tasks 7-9);
+        # this test only owns the coordinator lifecycle, so no real platform
+        # modules need to exist for it to pass.
+        patch("custom_components.pulson_alarm.PLATFORMS", []),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
