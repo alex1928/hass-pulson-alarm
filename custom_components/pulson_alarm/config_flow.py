@@ -53,6 +53,7 @@ class PulsonConfigFlow(ConfigFlow, domain=DOMAIN):
                     },
                     "qr",
                     QR_SCHEMA,
+                    user_input,
                 )
         return self.async_show_form(step_id="qr", data_schema=QR_SCHEMA, errors=errors)
 
@@ -61,11 +62,17 @@ class PulsonConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Accept host, System ID and PIN typed by hand."""
         if user_input is not None:
-            return await self._async_finish(dict(user_input), "manual", MANUAL_SCHEMA)
+            return await self._async_finish(
+                dict(user_input), "manual", MANUAL_SCHEMA, user_input
+            )
         return self.async_show_form(step_id="manual", data_schema=MANUAL_SCHEMA)
 
     async def _async_finish(
-        self, data: dict[str, Any], step_id: str, schema: vol.Schema
+        self,
+        data: dict[str, Any],
+        step_id: str,
+        schema: vol.Schema,
+        suggested_values: dict[str, Any],
     ) -> ConfigFlowResult:
         await self.async_set_unique_id(data[CONF_SYSTEM_ID])
         self._abort_if_unique_id_configured()
@@ -86,4 +93,8 @@ class PulsonConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title=f"PulsON {data[CONF_SYSTEM_ID][:8]}", data=data
             )
-        return self.async_show_form(step_id=step_id, data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(schema, suggested_values),
+            errors=errors,
+        )

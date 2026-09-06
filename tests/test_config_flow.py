@@ -90,6 +90,50 @@ async def test_qr_flow_connection_errors(
     assert result["errors"] == {"base": expected}
 
 
+def _suggested_value(schema: Any, key: str) -> Any:
+    """Pull the suggested_value HA stashed on a schema marker's description."""
+    for marker in schema.schema:
+        if marker == key:
+            if marker.description is None:
+                return None
+            return marker.description.get("suggested_value")
+    raise KeyError(key)
+
+
+async def test_qr_flow_invalid_auth_keeps_qr_input(hass: HomeAssistant) -> None:
+    form = await _start(hass, "qr")
+    with patch(
+        "custom_components.pulson_alarm.config_flow.PulsonClient.async_verify",
+        new=AsyncMock(side_effect=PulsonAuthError("x")),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {CONF_QR: QR}
+        )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "qr"
+    assert result["errors"] == {"base": "invalid_auth"}
+    assert _suggested_value(result["data_schema"], CONF_QR) == QR
+
+
+async def test_manual_flow_cannot_connect_keeps_manual_input(
+    hass: HomeAssistant,
+) -> None:
+    form = await _start(hass, "manual")
+    with patch(
+        "custom_components.pulson_alarm.config_flow.PulsonClient.async_verify",
+        new=AsyncMock(side_effect=PulsonConnectionError("x")),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {"host": "h", CONF_SYSTEM_ID: "SID", CONF_PIN: "1", "port": 8883},
+        )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "manual"
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert _suggested_value(result["data_schema"], "host") == "h"
+    assert _suggested_value(result["data_schema"], CONF_SYSTEM_ID) == "SID"
+
+
 async def test_manual_flow_creates_entry(hass: HomeAssistant) -> None:
     form = await _start(hass, "manual")
     with patch(
