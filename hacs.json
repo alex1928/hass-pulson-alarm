@@ -1,6 +1,5 @@
 {
   "name": "PulsON Alarm",
-  "content_in_root": false,
-  "render_readme": true,
-  "homeassistant": "2024.10.0"
+  "homeassistant": "2026.1.0",
+  "hide_default_branch": true
 }
