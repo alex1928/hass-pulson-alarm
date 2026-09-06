@@ -109,3 +109,52 @@ async def test_partition_alarm_unavailable_before_status_arrives(
     alarm = hass.states.get(find(hass, "parter_alarm"))
     assert alarm is not None
     assert alarm.state == STATE_UNAVAILABLE
+
+
+async def test_partition_alarm_unavailable_when_alarm_false_and_no_status(
+    hass: HomeAssistant,
+) -> None:
+    """A false `alarm` leaf alone, with no `status` yet, must still be unavailable.
+
+    `is_on` short-circuits on truthiness (`if data.alarm:`), not on
+    not-None, so `alarm=False` with `status=None` falls through to
+    `status is None` and would render `unknown` unless `available` mirrors
+    that same truthiness check rather than an `is not None` check.
+    """
+    username = PulsonClient("h", 8883, SID, "1234").username
+    state = build_state(
+        username,
+        [
+            (f"system/{SID}/users/{username}/partitions", "1"),
+            (f"system/{SID}/partitions/1/name", "Parter"),
+            (f"system/{SID}/partitions/1/alarm", "0"),
+        ],
+    )
+    await setup_with_state(hass, state)
+    alarm = hass.states.get(find(hass, "parter_alarm"))
+    assert alarm is not None
+    assert alarm.state == STATE_UNAVAILABLE
+
+
+async def test_partition_alarm_on_from_alarm_flag_before_status_arrives(
+    hass: HomeAssistant,
+) -> None:
+    """A true `alarm` leaf must surface immediately, even with no `status` yet.
+
+    MQTT gives no ordering guarantee between the independent `alarm` flag
+    and the `status` leaf, so a real alarm reported through `alarm` must not
+    be masked by a stricter availability gate that waits on `status`.
+    """
+    username = PulsonClient("h", 8883, SID, "1234").username
+    state = build_state(
+        username,
+        [
+            (f"system/{SID}/users/{username}/partitions", "1"),
+            (f"system/{SID}/partitions/1/name", "Parter"),
+            (f"system/{SID}/partitions/1/alarm", "1"),
+        ],
+    )
+    await setup_with_state(hass, state)
+    alarm = hass.states.get(find(hass, "parter_alarm"))
+    assert alarm is not None
+    assert alarm.state == "on"

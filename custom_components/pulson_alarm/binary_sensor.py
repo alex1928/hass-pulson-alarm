@@ -193,7 +193,7 @@ class PulsonPartitionAlarm(PulsonEntity, BinarySensorEntity):
         return (
             super().available
             and self.partition_id in self.coordinator.data.partitions
-            and (data.alarm is not None or data.status is not None)
+            and (data.alarm or data.status is not None)
         )
 
     @property
