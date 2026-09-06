@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from importlib import util as importlib_util
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
@@ -34,22 +33,6 @@ def build_state(username: str, messages: list[tuple[str, str]]) -> PulsonState:
     return state
 
 
-def _implemented_platforms() -> list[str]:
-    """Platforms declared in const.PLATFORMS whose module already exists.
-
-    The plan lands one platform module per task while const.PLATFORMS already
-    lists the full target set, so forwarding entry setup to a not-yet-written
-    platform would raise ModuleNotFoundError. Filtering here keeps this
-    helper usable, unmodified, by every task's tests as platforms are added.
-    """
-    return [
-        platform
-        for platform in PLATFORMS
-        if importlib_util.find_spec(f"custom_components.pulson_alarm.{platform}")
-        is not None
-    ]
-
-
 async def setup_with_state(hass: HomeAssistant, state: PulsonState) -> MockConfigEntry:
     """Set up the integration with a pre-seeded state and no real MQTT."""
     entry = MockConfigEntry(
@@ -72,7 +55,7 @@ async def setup_with_state(hass: HomeAssistant, state: PulsonState) -> MockConfi
         ),
         patch(
             "custom_components.pulson_alarm.PLATFORMS",
-            _implemented_platforms(),
+            PLATFORMS,
         ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
