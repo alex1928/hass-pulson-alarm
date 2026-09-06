@@ -1,0 +1,12 @@
+{
+  "domain": "pulson_alarm",
+  "name": "PulsON Alarm",
+  "codeowners": ["@alex1928"],
+  "config_flow": true,
+  "documentation": "https://github.com/alex1928/hass-pulson-alarm",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/alex1928/hass-pulson-alarm/issues",
+  "requirements": ["aiomqtt==2.3.0"],
+  "version": "0.1.0"
+}

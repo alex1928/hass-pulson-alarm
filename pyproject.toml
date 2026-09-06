@@ -1,0 +1,49 @@
+[project]
+name = "hass-pulson-alarm"
+version = "0.1.0"
+requires-python = ">=3.13"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+# Curated set mirroring Home Assistant core, not "ALL".
+select = [
+    "A", "ANN", "ASYNC", "B", "C4", "D", "DTZ", "E", "F", "FLY", "FURB",
+    "G", "I", "ICN", "INP", "ISC", "LOG", "N", "PERF", "PGH", "PIE", "PL",
+    "PT", "PTH", "RET", "RSE", "RUF", "S", "SIM", "SLF", "SLOT", "T20",
+    "TC", "TID", "TRY", "UP", "W",
+]
+ignore = [
+    "ANN401", "COM812", "D203", "D213", "E501", "ISC001",
+    "PLR0913", "TRY003", "TID252",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "ANN001", "ANN201", "D100", "D101", "D102", "D103",
+    "INP001", "PLR2004", "S101", "SLF001",
+]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+disallow_any_generics = true
+
+[[tool.mypy.overrides]]
+module = "aiomqtt.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=custom_components/pulson_alarm --cov-report=term-missing"

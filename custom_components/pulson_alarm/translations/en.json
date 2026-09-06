@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "PulsON Alarm",
+        "description": "Paste the panel QR payload (Keypad menu -> QR code -> System).\nFormat: 1;host;port;PIN;SYSTEM_ID",
+        "data": { "qr": "QR payload" }
+      },
+      "manual": {
+        "title": "PulsON Alarm (manual)",
+        "data": {
+          "host": "Cloud host",
+          "system_id": "System ID",
+          "pin": "User PIN",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the PulsON cloud.",
+      "invalid_auth": "Rejected by the broker - check System ID and PIN.",
+      "invalid_qr": "Not a valid QR payload (expected 1;host;port;PIN;SYSTEM_ID)."
+    },
+    "abort": { "already_configured": "This panel is already configured." }
+  }
+}

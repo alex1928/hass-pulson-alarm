@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "PulsON Alarm",
+        "description": "Wklej zawartość kodu QR centrali (Menu klawiatury -> Kod QR -> System).\nFormat: 1;host;port;PIN;SYSTEM_ID",
+        "data": { "qr": "Zawartość kodu QR" }
+      },
+      "manual": {
+        "title": "PulsON Alarm (ręcznie)",
+        "data": {
+          "host": "Host chmury",
+          "system_id": "System ID",
+          "pin": "PIN użytkownika",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Brak połączenia z chmurą PulsON.",
+      "invalid_auth": "Broker odrzucił dane - sprawdź System ID i PIN.",
+      "invalid_qr": "Nieprawidłowy kod QR (oczekiwano 1;host;port;PIN;SYSTEM_ID)."
+    },
+    "abort": { "already_configured": "Ta centrala jest już skonfigurowana." }
+  }
+}

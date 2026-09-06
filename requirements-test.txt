@@ -1,0 +1,4 @@
+pytest-homeassistant-custom-component==0.13.364
+aiomqtt==2.5.1
+ruff==0.16.6
+mypy==2.3.1
