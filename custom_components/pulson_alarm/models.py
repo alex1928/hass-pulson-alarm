@@ -182,10 +182,7 @@ def _apply_leaf(
         MODULE_PARTITIONS: _PARTITION_FIELDS,
         MODULE_INPUTS: _ZONE_FIELDS,
         MODULE_OUTPUTS: _OUTPUT_FIELDS,
-    }.get(module)
-
-    if field_map is None:
-        return state
+    }[module]
 
     attribute = field_map.get(field)
     if attribute is None:
@@ -197,8 +194,7 @@ def _apply_leaf(
         MODULE_OUTPUTS: _update_output,
     }
 
-    updater = updaters.get(module)
-    return updater(state, element_id, attribute, payload) if updater else state
+    return updaters[module](state, element_id, attribute, payload)
 
 
 def apply_message(state: PulsonState, topic: str, payload: str) -> PulsonState:  # noqa: PLR0911

@@ -141,3 +141,23 @@ def test_returned_mappings_reject_mutation() -> None:
     state = models.apply_message(models.EMPTY_STATE, f"{IDX}/partitions", "1")
     with pytest.raises(TypeError):
         state.partitions["2"] = models.PartitionData(id="2")  # type: ignore[index]
+
+
+def test_unchanged_partitions_index_returns_same_object() -> None:
+    state = models.apply_message(models.EMPTY_STATE, f"{IDX}/partitions", "1")
+    assert models.apply_message(state, f"{IDX}/partitions", "1") is state
+
+
+def test_unchanged_outputs_index_returns_same_object() -> None:
+    state = models.apply_message(models.EMPTY_STATE, f"{IDX}/outputs", "1")
+    assert models.apply_message(state, f"{IDX}/outputs", "1") is state
+
+
+def test_unknown_leaf_field_is_ignored() -> None:
+    topic = f"system/{SID}/partitions/1/bogus"
+    assert models.apply_message(models.EMPTY_STATE, topic, "x") is models.EMPTY_STATE
+
+
+def test_unknown_single_segment_topic_is_ignored() -> None:
+    topic = f"system/{SID}/mystery"
+    assert models.apply_message(models.EMPTY_STATE, topic, "x") is models.EMPTY_STATE
