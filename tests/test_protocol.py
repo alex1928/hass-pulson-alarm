@@ -6,7 +6,7 @@ from custom_components.pulson_alarm import protocol
 
 
 def test_mqtt_username_matches_reference_vector() -> None:
-    # Verified against a live panel: this exact username was accepted by the broker.
+    # Derivation vector over the documented placeholder System ID and PIN.
     assert protocol.mqtt_username("0011223344556677889900aa", "1111") == (
         "0011223344556677889900aa_88c4a919703e9f665f051984495536c4"
     )

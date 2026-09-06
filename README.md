@@ -30,9 +30,9 @@ Push-based — the panel reports changes, no polling.
 
 ### HACS (recommended)
 
-1. HACS → Integrations → ⋮ → **Custom repositories**
-2. Add `https://github.com/alex1928/hass-pulson-alarm`, category **Integration**
-3. Install **PulsON Alarm**, then restart Home Assistant
+1. Open **HACS**, click the ⋮ menu in the top right corner and choose **Custom repositories**
+2. Add `https://github.com/alex1928/hass-pulson-alarm`, set **Type** to **Integration**, click **ADD**
+3. Search for **PulsON Alarm**, click **Download**, then restart Home Assistant
 
 ### Manual
 
@@ -65,7 +65,7 @@ System ID and PIN separately.
   subscribed (a `#` wildcard is not enough).
 - Commands publish to `system/{sid}/{module}/{id}/{action}` with payload `{PIN}/{value}`.
 
-Full protocol write-up: [`docs/pulson-ha-integration-spec.md`](docs/pulson-ha-integration-spec.md).
+Full protocol write-up (in Polish): [`docs/pulson-ha-integration-spec.md`](docs/pulson-ha-integration-spec.md).
 
 ## Standalone CLI
 
