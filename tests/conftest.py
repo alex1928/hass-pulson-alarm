@@ -4,8 +4,9 @@ from collections.abc import Generator
 
 import pytest
 
-pytest_plugins = ["pytest_homeassistant_custom_component.plugins"]
-
+# NOTE: do NOT declare pytest_plugins here. pytest-homeassistant-custom-component
+# registers itself through an entry point; declaring it again raises
+# "Plugin already registered under a different name".
 
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(
