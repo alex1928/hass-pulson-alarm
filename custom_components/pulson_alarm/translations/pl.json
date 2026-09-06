@@ -29,5 +29,10 @@
       "invalid_qr": "Nieprawidłowa zawartość kodu QR. Oczekiwano 1;host;port;PIN;SYSTEM_ID."
     },
     "abort": { "already_configured": "Ta centrala jest już skonfigurowana." }
+  },
+  "exceptions": {
+    "invalid_code": {
+      "message": "Nieprawidłowy PIN. Rozbrojenie wymaga PIN-u użytkownika skonfigurowanego dla tej centrali."
+    }
   }
 }

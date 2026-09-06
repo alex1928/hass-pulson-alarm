@@ -29,5 +29,10 @@
       "invalid_qr": "Not a valid QR payload. Expected 1;host;port;PIN;SYSTEM_ID."
     },
     "abort": { "already_configured": "This panel is already configured." }
+  },
+  "exceptions": {
+    "invalid_code": {
+      "message": "Invalid PIN. Disarming requires the user PIN configured for this panel."
+    }
   }
 }

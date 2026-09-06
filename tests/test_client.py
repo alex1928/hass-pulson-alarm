@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import aiomqtt
+from homeassistant.exceptions import HomeAssistantError
 import pytest
 
 from custom_components.pulson_alarm.client import (
@@ -44,6 +45,26 @@ async def test_command_without_connection_raises() -> None:
     client = make_client()
     with pytest.raises(PulsonConnectionError):
         await client.async_command("panic_alarm", "1")
+
+
+async def test_transport_errors_are_home_assistant_errors() -> None:
+    """Both transport errors must be catchable as `HomeAssistantError`.
+
+    They escape through service calls; a bare `Exception` makes Home
+    Assistant log an unexpected error with a traceback and aborts the
+    calling automation instead of reporting a normal integration failure.
+    """
+    client = make_client()
+    with pytest.raises(HomeAssistantError):
+        await client.async_command("panic_alarm", "1")
+
+    with patch("custom_components.pulson_alarm.client.aiomqtt.Client") as factory:
+        factory.return_value.__aenter__.side_effect = aiomqtt.MqttCodeError(134)
+        with pytest.raises(HomeAssistantError):
+            await make_client().async_verify()
+
+    assert issubclass(PulsonAuthError, HomeAssistantError)
+    assert issubclass(PulsonConnectionError, HomeAssistantError)
 
 
 async def test_command_publishes_pin_prefixed_payload() -> None:
@@ -209,6 +230,87 @@ async def test_run_resubscribes_granular_after_reconnect() -> None:
         for field in FIELDS[MODULE_PARTITIONS]
     ]
     assert expected_leaf_subscriptions in second.subscribed
+
+
+async def test_run_notifies_on_every_connect_even_without_changes() -> None:
+    """Every successful connect must push a state notification.
+
+    After a reconnect the panel republishes the values we already hold, so
+    `apply_message` keeps returning the very same object and `_consume`
+    never fires `on_state`. The coordinator, however, recorded an update
+    failure when the connection dropped and only clears it on a successful
+    update - so without an unconditional notification at connect time every
+    entity stays `unavailable` until something physically changes on the
+    panel.
+    """
+    client = make_client()
+    events: list[str] = []
+
+    class FakeMqttFirstConnection:
+        """Announces partition '1' with a status, then drops the stream."""
+
+        async def __aenter__(self) -> FakeMqttFirstConnection:
+            events.append("connect-1")
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def subscribe(self, topic: Any, qos: int = 0) -> None:
+            return None
+
+        @property
+        def messages(self) -> Any:
+            async def gen() -> Any:
+                yield FakeMessage(
+                    f"system/SID/users/{client.username}/partitions", b"1"
+                )
+                yield FakeMessage("system/SID/partitions/1/status", b"1")
+                # Generator ends: the broker closed the stream, which sends
+                # async_run around to its reconnect branch.
+
+            return gen()
+
+    class FakeMqttSecondConnection:
+        """Republishes the identical status the reducer already holds."""
+
+        async def __aenter__(self) -> FakeMqttSecondConnection:
+            events.append("connect-2")
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def subscribe(self, topic: Any, qos: int = 0) -> None:
+            return None
+
+        @property
+        def messages(self) -> Any:
+            async def gen() -> Any:
+                yield FakeMessage("system/SID/partitions/1/status", b"1")
+                await client.async_stop()
+                # Never set: blocks until the consumer task is cancelled.
+                await asyncio.Event().wait()  # pragma: no cover - cancelled by stop
+
+            return gen()
+
+    def on_state(_state: Any) -> None:
+        events.append("notify")
+
+    with (
+        patch(
+            "custom_components.pulson_alarm.client.aiomqtt.Client",
+            side_effect=[FakeMqttFirstConnection(), FakeMqttSecondConnection()],
+        ),
+        patch("custom_components.pulson_alarm.client.RECONNECT_MIN", 0.0),
+    ):
+        await client.async_run(on_state, lambda _err: None)
+
+    # The republished value really was a no-op for the reducer...
+    assert client.state.partitions["1"].status == 1
+    # ...yet the second connection still notified.
+    after_reconnect = events[events.index("connect-2") + 1 :]
+    assert "notify" in after_reconnect, events
 
 
 async def test_run_reports_auth_error_and_stops() -> None:

@@ -14,6 +14,7 @@ import random
 from typing import TYPE_CHECKING, Final
 
 import aiomqtt
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util.ssl import client_context
 
 from .models import EMPTY_STATE, PulsonState, apply_message, known_ids
@@ -37,12 +38,20 @@ RECONNECT_MAX: Final = 300
 _AUTH_RETURN_CODES: Final = frozenset({134, 135})
 
 
-class PulsonAuthError(Exception):
-    """The broker rejected our credentials."""
+class PulsonAuthError(HomeAssistantError):
+    """The broker rejected our credentials.
+
+    Subclasses `HomeAssistantError` so that escaping one of these out of a
+    service call is reported to the user as a normal integration failure
+    rather than an unexpected crash with a traceback.
+    """
 
 
-class PulsonConnectionError(Exception):
-    """The broker could not be reached."""
+class PulsonConnectionError(HomeAssistantError):
+    """The broker could not be reached.
+
+    See `PulsonAuthError` for why this derives from `HomeAssistantError`.
+    """
 
 
 def decode_payload(payload: bytes | bytearray | None) -> str:
@@ -124,6 +133,16 @@ class PulsonClient:
                     # index topics won't re-trigger this, since re-applying an
                     # index we already hold is a no-op for the reducer.
                     await self._subscribe_granular(client)
+                    # Notify unconditionally, even though nothing in `state`
+                    # changed. A transport error made the coordinator record an
+                    # update failure, and only a *successful* update clears it.
+                    # The reducer will not produce one on its own here: after a
+                    # reconnect the panel republishes values we already hold, so
+                    # `apply_message` keeps returning the same object and
+                    # `_consume` stays silent. Without this call every entity
+                    # would stay `unavailable` until a value physically changed
+                    # on the panel.
+                    on_state(self.state)
                     await self._consume_until_stopped(client, on_state)
             except asyncio.CancelledError:
                 raise

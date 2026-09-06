@@ -117,11 +117,19 @@ class PulsonZone(_ZoneBase):
 
     @property
     def is_on(self) -> bool | None:
-        """True when the zone is violated."""
+        """True when the zone is violated, None when the panel cannot tell.
+
+        Only CLOSED is evidence of a secure zone. UNKNOWN, TAMPER and FAULT
+        say the panel has lost sight of the line - a cut detector cable must
+        never render as a securely closed door - so they report `unknown`
+        here and are surfaced by the companion problem sensor instead.
+        """
         status = self._data.status
-        if status is None:
-            return None
-        return status == LineState.OPEN
+        if status == LineState.OPEN:
+            return True
+        if status == LineState.CLOSED:
+            return False
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -137,9 +145,11 @@ class PulsonZone(_ZoneBase):
 class PulsonZoneProblem(_ZoneBase):
     """Zone tamper or fault."""
 
+    # Enabled by default on purpose: `PulsonZone.is_on` reports `unknown` for
+    # TAMPER and FAULT rather than guessing, so this sensor is the only place
+    # a sabotaged or broken zone is visible.
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator: PulsonCoordinator, zone_id: str) -> None:
         """Create the zone problem sensor."""

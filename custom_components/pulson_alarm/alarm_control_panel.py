@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.components.alarm_control_panel import AlarmControlPanelEntity
@@ -10,7 +11,9 @@ from homeassistant.components.alarm_control_panel.const import (
     AlarmControlPanelState,
     CodeFormat,
 )
+from homeassistant.exceptions import ServiceValidationError
 
+from .const import CONF_PIN, DOMAIN
 from .entity import PulsonEntity, async_add_new
 from .models import PartitionData, known_ids
 from .protocol import (
@@ -68,7 +71,6 @@ async def async_setup_entry(
 class PulsonPartition(PulsonEntity, AlarmControlPanelEntity):
     """One PulsON partition."""
 
-    _attr_name = None
     _attr_code_format = CodeFormat.NUMBER
     _attr_code_arm_required = False
     _attr_supported_features = (
@@ -89,6 +91,16 @@ class PulsonPartition(PulsonEntity, AlarmControlPanelEntity):
         )
 
     @property
+    def name(self) -> str:
+        """Partition name as configured on the panel.
+
+        A panel with several partitions must not produce several entities
+        that all fall back to the shared device name; every other platform
+        already uses the panel-supplied element name, so this one does too.
+        """
+        return self._data.name or f"Partition {self.partition_id}"
+
+    @property
     def available(self) -> bool:
         """Only available once the panel has reported a status for this partition.
 
@@ -104,8 +116,18 @@ class PulsonPartition(PulsonEntity, AlarmControlPanelEntity):
 
     @property
     def alarm_state(self) -> AlarmControlPanelState | None:
-        """Map the panel status enum onto Home Assistant states."""
-        status = self._data.status
+        """Map the panel status enum onto Home Assistant states.
+
+        `alarm` and `status` are independent MQTT leaves with no ordering
+        guarantee between them, so consulting `status` alone would let this
+        card read `armed_away` while the partition's safety binary sensor -
+        which gates on `alarm` - already says "Detected". The looser gate
+        wins on purpose: an alarm must never be hidden behind a stale status.
+        """
+        data = self._data
+        if data.alarm:
+            return AlarmControlPanelState.TRIGGERED
+        status = data.status
         if status is None:
             return None
         if status in ALARM_STATES:
@@ -128,8 +150,31 @@ class PulsonPartition(PulsonEntity, AlarmControlPanelEntity):
             attributes["exit_time"] = data.exit_time
         return attributes
 
+    def _validate_code(self, code: str | None) -> None:
+        """Reject anything that is not the configured user PIN.
+
+        `_attr_code_format` makes Home Assistant render a PIN pad, which
+        implies to the user that the code is checked. The panel never sees
+        it - the transport authenticates with the PIN held in the config
+        entry and the command payload carries that same PIN - so unless the
+        check happens here the keypad is pure theatre and any four digits
+        disarm the system.
+
+        Neither the supplied nor the expected code is ever logged, and the
+        comparison is constant-time.
+        """
+        expected: str = str(self.coordinator.config_entry.data[CONF_PIN])
+        if code is None or not hmac.compare_digest(
+            code.encode("utf-8"), expected.encode("utf-8")
+        ):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="invalid_code",
+            )
+
     async def async_alarm_disarm(self, code: str | None = None) -> None:
-        """Disarm the partition."""
+        """Disarm the partition once the supplied PIN checks out."""
+        self._validate_code(code)
         await self.coordinator.client.async_element_command(
             CMD_DISARM, self.partition_id
         )

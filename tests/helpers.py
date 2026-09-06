@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 SID = "SID"
+PIN = "1234"
 
 
 def build_state(username: str, messages: list[tuple[str, str]]) -> PulsonState:
@@ -33,16 +34,28 @@ def build_state(username: str, messages: list[tuple[str, str]]) -> PulsonState:
     return state
 
 
-async def setup_with_state(hass: HomeAssistant, state: PulsonState) -> MockConfigEntry:
-    """Set up the integration with a pre-seeded state and no real MQTT."""
+async def setup_with_state(
+    hass: HomeAssistant,
+    state: PulsonState,
+    transport: dict[str, Any] | None = None,
+) -> MockConfigEntry:
+    """Set up the integration with a pre-seeded state and no real MQTT.
+
+    Pass a dict as `transport` to capture the `on_state` / `on_error`
+    callbacks the real MQTT loop would push through, so a test can simulate
+    transport events (a drop, a reconnect) after setup.
+    """
     entry = MockConfigEntry(
         domain=DOMAIN,
-        data={"host": "h", "port": 8883, CONF_SYSTEM_ID: SID, CONF_PIN: "1234"},
+        data={"host": "h", "port": 8883, CONF_SYSTEM_ID: SID, CONF_PIN: PIN},
         unique_id=SID,
     )
     entry.add_to_hass(hass)
 
     async def fake_run(_self, on_state, on_error) -> None:
+        if transport is not None:
+            transport["on_state"] = on_state
+            transport["on_error"] = on_error
         on_state(state)
 
     with (

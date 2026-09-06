@@ -4,17 +4,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.helpers import entity_registry as er
+import pytest
 
 from custom_components.pulson_alarm.client import PulsonClient
-from tests.helpers import SID, build_state, setup_with_state
+from custom_components.pulson_alarm.protocol import LineState
+from tests.helpers import PIN, SID, build_state, setup_with_state
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 
 def full_state():
-    username = PulsonClient("h", 8883, SID, "1234").username
+    username = PulsonClient("h", 8883, SID, PIN).username
     return build_state(
         username,
         [
@@ -31,18 +34,26 @@ def full_state():
     )
 
 
-def find(hass: HomeAssistant, needle: str) -> str:
-    matches = [e for e in hass.states.async_entity_ids("binary_sensor") if needle in e]
-    assert matches, (
-        f"no binary_sensor matching {needle!r} in "
-        f"{hass.states.async_entity_ids('binary_sensor')}"
+def find(hass: HomeAssistant, suffix: str) -> str:
+    """Return the one binary_sensor entity id ending in `suffix`.
+
+    Suffix matching, and an exactness assert, rather than the substring
+    "first match wins" this used to do: now that the zone problem sensor
+    ships enabled, a zone's own id is a prefix of its problem sensor's id and
+    a substring search would silently return whichever happened to come first.
+    """
+    all_ids = hass.states.async_entity_ids("binary_sensor")
+    matches = [entity_id for entity_id in all_ids if entity_id.endswith(suffix)]
+    assert len(matches) == 1, (
+        f"expected exactly one binary_sensor ending in {suffix!r}, "
+        f"got {matches} out of {all_ids}"
     )
     return matches[0]
 
 
 async def test_zone_is_open_with_door_class(hass: HomeAssistant) -> None:
     await setup_with_state(hass, full_state())
-    zone = hass.states.get(find(hass, "drzwi"))
+    zone = hass.states.get(find(hass, "drzwi_wejsciowe"))
     assert zone is not None
     assert zone.state == "on"
     assert zone.attributes["device_class"] == "door"
@@ -61,13 +72,13 @@ async def test_partition_alarm_on_when_triggered(hass: HomeAssistant) -> None:
 
 async def test_module_connectivity(hass: HomeAssistant) -> None:
     await setup_with_state(hass, full_state())
-    assert hass.states.get(find(hass, "ip_wi_fi")).state == "on"
-    assert hass.states.get(find(hass, "gsm")).state == "off"
+    assert hass.states.get(find(hass, "ip_wi_fi_module")).state == "on"
+    assert hass.states.get(find(hass, "gsm_module")).state == "off"
 
 
 async def test_programming_mode(hass: HomeAssistant) -> None:
     await setup_with_state(hass, full_state())
-    assert hass.states.get(find(hass, "programming")).state == "on"
+    assert hass.states.get(find(hass, "programming_mode")).state == "on"
 
 
 async def test_zone_unavailable_before_status_arrives(hass: HomeAssistant) -> None:
@@ -88,7 +99,7 @@ async def test_zone_unavailable_before_status_arrives(hass: HomeAssistant) -> No
         ],
     )
     await setup_with_state(hass, state)
-    zone = hass.states.get(find(hass, "drzwi"))
+    zone = hass.states.get(find(hass, "drzwi_wejsciowe"))
     assert zone is not None
     assert zone.state == STATE_UNAVAILABLE
 
@@ -158,3 +169,63 @@ async def test_partition_alarm_on_from_alarm_flag_before_status_arrives(
     alarm = hass.states.get(find(hass, "parter_alarm"))
     assert alarm is not None
     assert alarm.state == "on"
+
+
+def zone_state(status: str):
+    """Build a state with one named zone reporting `status` on its input line."""
+    username = PulsonClient("h", 8883, SID, PIN).username
+    return build_state(
+        username,
+        [
+            (f"system/{SID}/users/{username}/inputs", "1"),
+            (f"system/{SID}/inputs/1/name", "Drzwi wejściowe"),
+            (f"system/{SID}/inputs/1/status", str(int(status))),
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    ("line_state", "expected_zone", "expected_problem"),
+    [
+        (LineState.UNKNOWN, STATE_UNKNOWN, "off"),
+        (LineState.CLOSED, "off", "off"),
+        (LineState.OPEN, "on", "off"),
+        (LineState.TAMPER, STATE_UNKNOWN, "on"),
+        (LineState.FAULT, STATE_UNKNOWN, "on"),
+    ],
+)
+async def test_zone_and_problem_state_for_every_line_state(
+    hass: HomeAssistant,
+    line_state: LineState,
+    expected_zone: str,
+    expected_problem: str,
+) -> None:
+    """Only CLOSED may read as "closed".
+
+    Mapping UNKNOWN, TAMPER and FAULT onto `False` rendered a cut detector
+    cable as a securely closed door. Those three states say the panel cannot
+    see the line, so the zone reports `unknown` and the problem sensor - not
+    the zone - carries the tamper/fault signal.
+    """
+    await setup_with_state(hass, zone_state(line_state))
+
+    zone = hass.states.get(find(hass, "drzwi_wejsciowe"))
+    assert zone is not None
+    assert zone.state == expected_zone
+
+    problem = hass.states.get(find(hass, "drzwi_wejsciowe_problem"))
+    assert problem is not None
+    assert problem.state == expected_problem
+
+
+async def test_zone_problem_sensor_is_enabled_by_default(hass: HomeAssistant) -> None:
+    """The problem sensor must ship enabled.
+
+    It is now the only place a tampered or faulted zone is visible, so
+    leaving it disabled in the registry by default would hide sabotage.
+    """
+    await setup_with_state(hass, zone_state(LineState.TAMPER))
+    registry = er.async_get(hass)
+    entry = registry.async_get(find(hass, "drzwi_wejsciowe_problem"))
+    assert entry is not None
+    assert entry.disabled_by is None
