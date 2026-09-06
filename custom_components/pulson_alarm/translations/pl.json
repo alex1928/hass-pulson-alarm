@@ -21,6 +21,11 @@
           "pin": "PIN użytkownika",
           "port": "Port"
         }
+      },
+      "reauth_confirm": {
+        "title": "Ponowna autoryzacja PulsON Alarm",
+        "description": "Broker odrzucił zapisany PIN dla System ID {system_id}. Podaj aktualny PIN użytkownika; hosta i System ID nie można tu zmienić.",
+        "data": { "pin": "PIN użytkownika" }
       }
     },
     "error": {

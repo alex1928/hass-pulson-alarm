@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .client import PulsonAuthError
 from .const import DOMAIN
 from .models import EMPTY_STATE, PulsonState
 
@@ -69,3 +70,9 @@ class PulsonCoordinator(DataUpdateCoordinator[PulsonState]):
     @callback
     def _handle_error(self, err: Exception) -> None:
         self.async_set_update_error(err)
+        if isinstance(err, PulsonAuthError):
+            # The transport already gave up (`async_run` returns after this
+            # callback for an auth failure) so nothing will retry on its own.
+            # Without this the entry just sits broken until the user deletes
+            # and re-adds it - there is no other path back to a working PIN.
+            self.config_entry.async_start_reauth(self.hass)

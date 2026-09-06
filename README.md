@@ -15,14 +15,14 @@ app uses — so no extra hardware is required.
 
 | Entity | What it gives you |
 |---|---|
-| `alarm_control_panel` (per partition) | live state, arm away / arm night / disarm |
+| `alarm_control_panel` (per partition) | live state, arm away / arm night / disarm (disarm requires the PIN) |
 | `binary_sensor` (per zone) | open / closed, with name from the panel |
-| `binary_sensor` (per zone, *disabled by default*) | tamper / fault |
+| `binary_sensor` (per zone, *enabled by default*) | tamper / fault |
 | `binary_sensor` (per partition) | alarm active |
 | `binary_sensor` | IP/Wi-Fi module online, GSM module online |
 | `binary_sensor` | installer programming (service) mode |
 | `switch` (per output) | PGM output on/off |
-| `switch` (per zone, *disabled by default*) | bypass / un-bypass |
+| `switch` (per zone) | bypass / un-bypass |
 
 Push-based — the panel reports changes, no polling.
 
@@ -96,10 +96,19 @@ python3 tools/pulson.py arm 1
 
 ## Security
 
-Your **System ID + PIN grant full remote control of the alarm.** They are stored in the Home
-Assistant config entry. Never commit them, paste them into issues, or share the QR code.
-Panic/hold-up is deliberately **not** exposed as an entity — it raises a real hold-up alarm at the
-monitoring station.
+Your **System ID + PIN grant full remote control of the alarm.** Never commit them, paste them
+into issues, or share the QR code.
+
+- The PIN is stored in Home Assistant's `.storage` directory **in plain text**, and it is included
+  in whatever Home Assistant backups you take. Protect your backups accordingly.
+- Disarming a partition through this integration requires that same PIN; arming does not.
+- This integration **does not replace the keypad or the connection to your monitoring station**.
+  It is an additional remote-control channel alongside them, not a substitute for either.
+- Installing and using this integration may affect your alarm's **warranty, your insurance
+  policy, or your monitoring contract.** Check your terms before relying on it, and tell your
+  monitoring station before testing arm/disarm through it on a live, supervised installation.
+- Panic/hold-up is deliberately **not** exposed as an entity — it raises a real hold-up alarm at the
+  monitoring station.
 
 ## License
 

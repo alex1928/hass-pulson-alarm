@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.pulson_alarm.client import PulsonAuthError, PulsonConnectionError
 from custom_components.pulson_alarm.const import CONF_PIN, CONF_SYSTEM_ID, DOMAIN
+from custom_components.pulson_alarm.models import EMPTY_STATE
+from tests.helpers import setup_with_state
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -71,3 +73,26 @@ async def test_setup_failures(
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
     assert entry.state is expected
+
+
+async def test_runtime_auth_error_starts_reauth(hass: HomeAssistant) -> None:
+    """A `PulsonAuthError` raised while already running must trigger reauth.
+
+    `PulsonClient.async_run` reports the error and then simply returns (see
+    client.py), so nothing retries on its own - a PIN changed on the keypad
+    would otherwise leave the entry unavailable forever with no way back
+    except deleting and re-adding it. The coordinator's error handler is
+    what has to start reauth, since it is the one holding the config entry.
+    """
+    transport: dict[str, Any] = {}
+    entry = await setup_with_state(hass, EMPTY_STATE, transport)
+
+    transport["on_error"](PulsonAuthError("bad pin"))
+    await hass.async_block_till_done()
+
+    flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    assert any(
+        flow["context"].get("source") == SOURCE_REAUTH
+        and flow["context"].get("entry_id") == entry.entry_id
+        for flow in flows
+    )

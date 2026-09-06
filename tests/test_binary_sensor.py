@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.helpers import entity_registry as er
 import pytest
 
 from custom_components.pulson_alarm.client import PulsonClient
+from custom_components.pulson_alarm.models import apply_message
 from custom_components.pulson_alarm.protocol import LineState
 from tests.helpers import PIN, SID, build_state, setup_with_state
 
@@ -229,3 +230,78 @@ async def test_zone_problem_sensor_is_enabled_by_default(hass: HomeAssistant) ->
     entry = registry.async_get(find(hass, "drzwi_wejsciowe_problem"))
     assert entry is not None
     assert entry.disabled_by is None
+
+
+async def test_entities_survive_the_realistic_two_stage_message_order(
+    hass: HomeAssistant,
+) -> None:
+    """Drive messages through in the order real hardware actually uses.
+
+    Every other test in this module (and in test_switch.py and
+    test_alarm_control_panel.py) builds a complete state in one shot via
+    `build_state` before any entity exists, which cannot happen against a
+    real panel: the retained index list always arrives before any `name`
+    leaf, because a leaf only publishes once its exact topic is explicitly
+    subscribed (see tests/helpers.py). That means entities are actually
+    created while `name` is still `None`, so their entity_id is derived from
+    the element id (e.g. `binary_sensor.pulson_alarm_zone_1`), never from
+    the panel-supplied name - the friendly name self-corrects once the name
+    leaf arrives, but the entity_id it was already assigned does not. This
+    test reproduces that order and checks entities created that way still
+    end up available with the right friendly name once the rest lands.
+    """
+    username = PulsonClient("h", 8883, SID, PIN).username
+    transport: dict[str, Any] = {}
+
+    # Stage 1: only the retained index lists have arrived - no `name`, no
+    # `status` for any element yet.
+    index_only = build_state(
+        username,
+        [
+            (f"system/{SID}/users/{username}/partitions", "1"),
+            (f"system/{SID}/users/{username}/inputs", "1"),
+        ],
+    )
+    entry = await setup_with_state(hass, index_only, transport)
+
+    zone_id = "binary_sensor.pulson_alarm_zone_1"
+    alarm_id = "binary_sensor.pulson_alarm_partition_1_alarm"
+    partition_id = "alarm_control_panel.pulson_alarm_partition_1"
+
+    for entity_id in (zone_id, alarm_id, partition_id):
+        got = hass.states.get(entity_id)
+        assert got is not None, f"{entity_id} was not created from the index alone"
+        assert got.state == STATE_UNAVAILABLE
+
+    # Stage 2: the granular leaf subscriptions land - names first, exactly
+    # like FIELDS lists "name" ahead of "status" for every module.
+    state = apply_message(index_only, f"system/{SID}/partitions/1/name", "Parter")
+    state = apply_message(state, f"system/{SID}/inputs/1/name", "Drzwi wejściowe")
+    transport["on_state"](state)
+    await hass.async_block_till_done()
+
+    # Stage 3: statuses land last.
+    state = apply_message(state, f"system/{SID}/partitions/1/status", "0")
+    state = apply_message(state, f"system/{SID}/inputs/1/status", "2")
+    transport["on_state"](state)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(zone_id).state == "on"
+    assert hass.states.get(alarm_id).state == "off"
+    assert hass.states.get(partition_id).state == "disarmed"
+
+    assert (
+        hass.states.get(zone_id).attributes["friendly_name"]
+        == "PulsON Alarm Drzwi wejściowe"
+    )
+    assert (
+        hass.states.get(alarm_id).attributes["friendly_name"]
+        == "PulsON Alarm Parter alarm"
+    )
+    assert (
+        hass.states.get(partition_id).attributes["friendly_name"]
+        == "PulsON Alarm Parter"
+    )
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()

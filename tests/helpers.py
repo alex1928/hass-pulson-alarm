@@ -27,7 +27,20 @@ PIN = "1234"
 
 
 def build_state(username: str, messages: list[tuple[str, str]]) -> PulsonState:
-    """Fold a list of (topic, payload) pairs into a state."""
+    """Fold a list of (topic, payload) pairs into a state.
+
+    Most tests pass this a complete set of messages - index, name and
+    status together - and hand the result straight to `setup_with_state`,
+    so entities are created only after everything has already arrived. Real
+    hardware never does that: the retained index list always arrives before
+    any per-element `name` or `status` leaf, because a leaf only starts
+    publishing once its exact topic is subscribed. Collapsing that two-stage
+    arrival here is fine for most tests, but it does mean entities in those
+    tests are never seen in the state they're actually created in (`name`
+    still `None`). The realistic ordering - and what it does to entity_id
+    assignment - is covered separately by
+    test_binary_sensor.py::test_entities_survive_the_realistic_two_stage_message_order.
+    """
     state = EMPTY_STATE
     for topic, payload in messages:
         state = apply_message(state, topic, payload)

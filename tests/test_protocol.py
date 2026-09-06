@@ -97,3 +97,30 @@ def test_fields_cover_every_module() -> None:
     assert set(protocol.FIELDS) == set(protocol.MODULES)
     assert "status" in protocol.FIELDS[protocol.MODULE_PARTITIONS]
     assert "block_enable" in protocol.FIELDS[protocol.MODULE_INPUTS]
+
+
+@pytest.mark.parametrize(
+    ("constant_name", "expected"),
+    [
+        ("CMD_ARM_AWAY", ("partitions/{id}/set_arm", "1")),
+        ("CMD_ARM_NIGHT", ("partitions/{id}/set_arm", "2")),
+        ("CMD_DISARM", ("partitions/{id}/set_disarm", "0")),
+        ("CMD_BLOCK", ("inputs/{id}/block_set", "1")),
+        ("CMD_UNBLOCK", ("inputs/{id}/block_set", "0")),
+        ("CMD_OUTPUT_ON", ("outputs/{id}/set", "1")),
+        ("CMD_OUTPUT_OFF", ("outputs/{id}/set", "0")),
+        ("CMD_PANIC", ("panic_alarm", "1")),
+    ],
+)
+def test_command_constants_are_pinned_to_their_exact_wire_values(
+    constant_name: str, expected: tuple[str, str]
+) -> None:
+    """Pin every CMD_* constant to its literal wire value.
+
+    These strings decide whether a command arms or disarms someone's house.
+    Every other test that exercises a command compares the constant against
+    itself (e.g. `command.await_args.args[0] == CMD_ARM_AWAY`), so swapping
+    `CMD_ARM_AWAY` for `CMD_ARM_NIGHT`, or redefining `CMD_DISARM`, would
+    still pass the rest of the suite. Only a literal comparison catches that.
+    """
+    assert getattr(protocol, constant_name) == expected

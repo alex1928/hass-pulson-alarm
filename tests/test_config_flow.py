@@ -159,3 +159,84 @@ async def test_duplicate_panel_aborts(hass: HomeAssistant) -> None:
         )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+def _reauth_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="00112233",
+        data={
+            "host": "solid.pulsonalarm.pl",
+            "port": 8883,
+            CONF_SYSTEM_ID: "00112233",
+            CONF_PIN: "4321",
+        },
+    )
+
+
+async def test_reauth_with_good_pin_updates_entry_and_aborts(
+    hass: HomeAssistant,
+) -> None:
+    """A successful reauth must update the stored PIN and reload the entry."""
+    entry = _reauth_entry()
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+
+    with patch(
+        "custom_components.pulson_alarm.config_flow.PulsonClient.async_verify",
+        new=AsyncMock(),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_PIN: "9999"}
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_PIN] == "9999"
+    assert entry.data[CONF_SYSTEM_ID] == "00112233"
+
+
+async def test_reauth_with_bad_pin_shows_error(hass: HomeAssistant) -> None:
+    """A rejected PIN must re-show the form with `invalid_auth`, entry untouched."""
+    entry = _reauth_entry()
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reauth_flow(hass)
+
+    with patch(
+        "custom_components.pulson_alarm.config_flow.PulsonClient.async_verify",
+        new=AsyncMock(side_effect=PulsonAuthError("x")),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_PIN: "0000"}
+        )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"] == {"base": "invalid_auth"}
+    assert entry.data[CONF_PIN] == "4321"
+
+
+async def test_reauth_cannot_connect_shows_error(hass: HomeAssistant) -> None:
+    """A broker that cannot be reached must show `cannot_connect`, not crash."""
+    entry = _reauth_entry()
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reauth_flow(hass)
+
+    with patch(
+        "custom_components.pulson_alarm.config_flow.PulsonClient.async_verify",
+        new=AsyncMock(side_effect=PulsonConnectionError("x")),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_PIN: "0000"}
+        )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert entry.data[CONF_PIN] == "4321"

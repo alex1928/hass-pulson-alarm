@@ -21,6 +21,11 @@
           "pin": "User PIN",
           "port": "Port"
         }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate PulsON Alarm",
+        "description": "The broker rejected the stored PIN for System ID {system_id}. Enter the current user PIN; the host and System ID cannot be changed here.",
+        "data": { "pin": "User PIN" }
       }
     },
     "error": {

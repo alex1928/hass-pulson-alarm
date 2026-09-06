@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.components.alarm_control_panel import AlarmControlPanelState
-from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 import pytest
 
+from custom_components.pulson_alarm import protocol
 from custom_components.pulson_alarm.client import PulsonClient, PulsonConnectionError
 from custom_components.pulson_alarm.protocol import (
     CMD_ARM_AWAY,
@@ -81,6 +82,30 @@ async def test_state_mapping(
     entity = get_partition_entity(hass)
     assert entity is not None
     assert entity.state == expected
+
+
+async def test_every_partition_status_maps_to_a_known_state(
+    hass: HomeAssistant,
+) -> None:
+    """Every code 0-19 must map to a real state; every ALARM_STATES code to TRIGGERED.
+
+    `test_state_mapping` above only exercises 10 of the 20 codes. Codes
+    6-13, 16 and 18 - fire, gas, CO, medical, tamper, flood, temperature,
+    panic, zone tamper - were never checked, so dropping one of them from
+    `protocol.ALARM_STATES` would silently render, say, a fire as `unknown`
+    without failing anything.
+    """
+    for code in range(20):
+        entry = await setup_with_state(hass, state_with_status(str(code)))
+        entity = get_partition_entity(hass)
+        assert entity is not None, f"no entity for status {code}"
+        assert entity.state != STATE_UNKNOWN, f"status {code} mapped to unknown"
+        if code in protocol.ALARM_STATES:
+            assert entity.state == AlarmControlPanelState.TRIGGERED, (
+                f"status {code} is in ALARM_STATES but did not map to TRIGGERED"
+            )
+        await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done()
 
 
 async def test_attributes_expose_raw_values(hass: HomeAssistant) -> None:
