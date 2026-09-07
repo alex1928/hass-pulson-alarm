@@ -12,3 +12,6 @@ secrets.yaml
 .superpowers/
 .coverage
 htmlcov/
+
+# internal design docs — local only, never published
+docs/superpowers/
