@@ -65,8 +65,6 @@ System ID and PIN separately.
   subscribed (a `#` wildcard is not enough).
 - Commands publish to `system/{sid}/{module}/{id}/{action}` with payload `{PIN}/{value}`.
 
-Full protocol write-up (in Polish): [`docs/pulson-ha-integration-spec.md`](docs/pulson-ha-integration-spec.md).
-
 ## Standalone CLI
 
 [`tools/pulson.py`](tools/pulson.py) is a dependency-free reference client (stdlib only) — useful for

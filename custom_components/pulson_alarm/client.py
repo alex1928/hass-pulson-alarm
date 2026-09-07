@@ -55,10 +55,19 @@ class PulsonConnectionError(HomeAssistantError):
 
 
 def decode_payload(payload: bytes | bytearray | None) -> str:
-    """Panel text is latin-1, not UTF-8."""
+    """Decode panel text.
+
+    The panel sends UTF-8: zone names carry Polish diacritics. Fall back to
+    latin-1 (which cannot fail) rather than emit replacement characters, in
+    case some panel or firmware sends something else.
+    """
     if payload is None:
         return ""
-    return bytes(payload).decode("latin-1", errors="replace")
+    raw = bytes(payload)
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("latin-1")
 
 
 def _translate(err: Exception) -> Exception:
@@ -194,9 +203,10 @@ class PulsonClient:
         async for message in client.messages:
             if self._stop.is_set():
                 return
-            changed = apply_message(
-                self.state, str(message.topic), decode_payload(message.payload)
-            )
+            topic = str(message.topic)
+            value = decode_payload(message.payload)
+            _LOGGER.debug("rx %s = %r", topic, value)
+            changed = apply_message(self.state, topic, value)
             if changed is not self.state:
                 self.state = changed
                 await self._subscribe_granular(client)
@@ -206,7 +216,13 @@ class PulsonClient:
         self._subscribed.clear()
         for topic in (
             f"system/{self._system_id}/users/{self.username}/#",
+            # The panel publishes a value only once its exact leaf topic is
+            # subscribed, so an 'online/#' wildcard never yields the module
+            # states. Subscribe both: the wildcard still carries anything
+            # retained, the leaves are what make the panel talk.
             f"system/{self._system_id}/online/#",
+            f"system/{self._system_id}/online/esp",
+            f"system/{self._system_id}/online/simcom",
             f"system/{self._system_id}/programming",
         ):
             await client.subscribe(topic, qos=0)
