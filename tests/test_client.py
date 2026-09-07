@@ -85,9 +85,17 @@ async def test_element_command_formats_id() -> None:
     assert mqtt.publish.await_args.args[0] == "system/SID/inputs/3/block_set"
 
 
-def test_decode_uses_latin1() -> None:
-    assert decode_payload(b"wej\xf6cie") == "wejöcie"
+def test_decode_reads_panel_text_as_utf8() -> None:
+    """The panel sends UTF-8. Zone names carry Polish diacritics."""
+    assert decode_payload("wejście".encode()) == "wejście"
+    assert decode_payload("piętro".encode()) == "piętro"
+    assert decode_payload(b"salon") == "salon"
     assert decode_payload(None) == ""
+
+
+def test_decode_falls_back_to_latin1_for_non_utf8_bytes() -> None:
+    """A panel that is not UTF-8 must still yield text, never raise."""
+    assert decode_payload(b"wej\xf6cie") == "wejöcie"
 
 
 async def test_verify_maps_auth_failure() -> None:
@@ -146,6 +154,12 @@ async def test_run_folds_messages_and_subscribes_granular() -> None:
 
     assert client.state.partitions["1"].status == 1
     assert any(isinstance(sub, list) for sub in fake.subscribed)
+    # The panel publishes a leaf only once that exact topic is subscribed, so
+    # the module states need explicit leaves — an 'online/#' wildcard alone
+    # leaves them permanently unknown.
+    assert "system/SID/online/esp" in fake.subscribed
+    assert "system/SID/online/simcom" in fake.subscribed
+    assert "system/SID/programming" in fake.subscribed
     assert updates
 
 
