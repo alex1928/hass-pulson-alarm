@@ -108,6 +108,12 @@ into issues, or share the QR code.
 - Panic/hold-up is deliberately **not** exposed as an entity — it raises a real hold-up alarm at the
   monitoring station.
 
+## Credits
+
+The shield icon was generated with Recraft and is included as PNG plus its SVG source in
+`custom_components/pulson_alarm/brand/`. The SVG keeps its C2PA provenance metadata, which
+records that the artwork is AI-generated.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
